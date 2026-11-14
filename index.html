@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Совместный просмотр VK Video</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- 1. Официальный скрипт VK Video Player API -->
+    <script src="https://vk.com/js/api/videoplayer.js"></script>
+
+    <!-- 2. Firebase (совместимая версия 8, работает через CDN) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <h1>🎬 Совместный просмотр VK Video</h1>
+            <div class="room-controls">
+                <input type="text" id="roomId" placeholder="Название комнаты (например, movie-night)" value="default-room">
+                <button id="joinBtn">Войти в комнату</button>
+            </div>
+            <p id="status" class="status">Введите название комнаты и нажмите «Войти»</p>
+        </header>
+
+        <main>
+            <!-- Блок для вставки iframe из VK -->
+            <div id="playerContainer" class="player-container">
+                <!-- Сюда будет вставлен iframe -->
+                <p class="placeholder">Вставьте iframe-код видео из VK (кнопка «Поделиться» → «Экспортировать»).</p>
+            </div>
+
+            <div class="sync-info">
+                <span id="roleBadge" class="badge">👤 Зритель</span>
+                <button id="becomeLeaderBtn" class="leader-btn" style="display:none;">Стать ведущим</button>
+                <span id="syncStatus" class="sync-status">Синхронизация: ожидание...</span>
+            </div>
+        </main>
+
+        <footer>
+            <p>Синхронизация работает через Firebase. Убедитесь, что у вас настроен проект Firebase (см. инструкцию в коде).</p>
+        </footer>
+    </div>
+
+    <!-- Подключаем наш скрипт -->
+    <script src="script.js"></script>
+</body>
+</html>

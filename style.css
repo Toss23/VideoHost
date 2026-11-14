@@ -1,0 +1,183 @@
+/* Базовые стили */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0f0f13;
+    color: #e4e4e7;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.app-container {
+    max-width: 1000px;
+    width: 100%;
+    background: #1a1a22;
+    border-radius: 16px;
+    padding: 24px 30px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #4f8ef7, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.room-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#roomId {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #24242e;
+    color: #e4e4e7;
+    font-size: 1rem;
+    width: 260px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#roomId:focus {
+    border-color: #4f8ef7;
+}
+
+#joinBtn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #4f8ef7;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#joinBtn:hover {
+    background: #3a7ae0;
+}
+
+.status {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #9ca3af;
+}
+
+/* Плеер */
+.player-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* соотношение 16:9 */
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.player-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.placeholder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #6b7280;
+    text-align: center;
+    font-size: 1rem;
+    padding: 20px;
+}
+
+/* Синхронизация */
+.sync-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 12px;
+    background: #20202a;
+    border-radius: 10px;
+}
+
+.badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: #333;
+    color: #ccc;
+}
+
+.badge.leader {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.leader-btn {
+    padding: 6px 16px;
+    border: 1px solid #4f8ef7;
+    border-radius: 20px;
+    background: transparent;
+    color: #4f8ef7;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.leader-btn:hover {
+    background: #4f8ef7;
+    color: #fff;
+}
+
+.sync-status {
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
+footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: #6b7280;
+    border-top: 1px solid #2a2a35;
+    padding-top: 12px;
+}
+
+/* Адаптив */
+@media (max-width: 600px) {
+    .app-container {
+        padding: 16px;
+    }
+    h1 {
+        font-size: 1.3rem;
+    }
+    #roomId {
+        width: 180px;
+    }
+}
