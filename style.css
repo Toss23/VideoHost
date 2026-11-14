@@ -1,9 +1,4 @@
-/* Базовые стили */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
     font-family: 'Segoe UI', Roboto, Arial, sans-serif;
@@ -16,7 +11,7 @@ body {
 }
 
 .app-container {
-    max-width: 1000px;
+    max-width: 1200px; /* Увеличили ширину для двух колонок */
     width: 100%;
     background: #1a1a22;
     border-radius: 16px;
@@ -24,10 +19,7 @@ body {
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 }
 
-header {
-    text-align: center;
-    margin-bottom: 20px;
-}
+header { text-align: center; margin-bottom: 20px; }
 
 h1 {
     font-size: 1.8rem;
@@ -38,146 +30,110 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-.room-controls {
+.room-controls, .input-group {
+    display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
+}
+
+input[type="text"] {
+    padding: 10px 16px; border-radius: 8px;
+    border: 1px solid #333; background: #24242e;
+    color: #e4e4e7; font-size: 1rem; outline: none;
+}
+
+input[type="text"]:focus { border-color: #4f8ef7; }
+
+#nickname { width: 180px; }
+#roomId { width: 200px; }
+#videoInput { width: 100%; max-width: 600px; }
+
+button {
+    padding: 10px 20px; border: none; border-radius: 8px;
+    background: #4f8ef7; color: #fff; font-weight: 600; cursor: pointer;
+}
+button:hover { background: #3a7ae0; }
+
+.status { margin-top: 10px; font-size: 0.9rem; color: #9ca3af; }
+
+.video-setup {
+    background: #20202a; padding: 15px; border-radius: 12px;
+    margin-bottom: 20px; border: 1px solid #333;
+}
+
+/* --- Двухколоночный макет --- */
+.main-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 20px;
+}
+
+/* Секция плеера */
+.player-section {
     display: flex;
-    justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 15px;
 }
 
-#roomId {
-    padding: 10px 16px;
-    border-radius: 8px;
-    border: 1px solid #333;
-    background: #24242e;
-    color: #e4e4e7;
-    font-size: 1rem;
-    width: 260px;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-#roomId:focus {
-    border-color: #4f8ef7;
-}
-
-#joinBtn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    background: #4f8ef7;
-    color: #fff;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-#joinBtn:hover {
-    background: #3a7ae0;
-}
-
-.status {
-    margin-top: 10px;
-    font-size: 0.9rem;
-    color: #9ca3af;
-}
-
-/* Плеер */
 .player-container {
-    position: relative;
-    width: 100%;
-    padding-bottom: 56.25%; /* соотношение 16:9 */
-    background: #000;
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
+    position: relative; width: 100%; padding-bottom: 56.25%;
+    background: #000; border-radius: 12px; overflow: hidden;
 }
 
 .player-container iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: none;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;
 }
 
 .placeholder {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #6b7280;
-    text-align: center;
-    font-size: 1rem;
-    padding: 20px;
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); color: #6b7280;
 }
 
-/* Синхронизация */
 .sync-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 12px;
-    background: #20202a;
-    border-radius: 10px;
+    display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
+    padding: 12px; background: #20202a; border-radius: 10px;
 }
 
 .badge {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    background: #333;
-    color: #ccc;
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 0.85rem; font-weight: 600; background: #333; color: #ccc;
 }
-
-.badge.leader {
-    background: #7c3aed;
-    color: #fff;
-}
+.badge.leader { background: #7c3aed; color: #fff; }
 
 .leader-btn {
-    padding: 6px 16px;
-    border: 1px solid #4f8ef7;
-    border-radius: 20px;
-    background: transparent;
-    color: #4f8ef7;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 6px 16px; border: 1px solid #4f8ef7;
+    border-radius: 20px; background: transparent;
+    color: #4f8ef7; font-weight: 500; cursor: pointer;
+}
+.leader-btn:hover { background: #4f8ef7; color: #fff; }
+
+.sync-status { font-size: 0.85rem; color: #9ca3af; margin-left: auto; }
+
+/* --- Секция участников --- */
+.users-section {
+    background: #20202a; border-radius: 12px; padding: 15px;
+    border: 1px solid #333; display: flex; flex-direction: column;
 }
 
-.leader-btn:hover {
-    background: #4f8ef7;
-    color: #fff;
+.users-section h3 {
+    font-size: 1rem; margin-bottom: 12px; color: #a1a1aa;
+    border-bottom: 1px solid #333; padding-bottom: 8px;
 }
 
-.sync-status {
-    font-size: 0.85rem;
-    color: #9ca3af;
+.users-list {
+    list-style: none; overflow-y: auto; max-height: 400px;
+    display: flex; flex-direction: column; gap: 8px;
 }
 
-footer {
-    margin-top: 20px;
-    text-align: center;
-    font-size: 0.75rem;
-    color: #6b7280;
-    border-top: 1px solid #2a2a35;
-    padding-top: 12px;
+.user-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-radius: 8px; background: #2a2a35;
+    font-size: 0.9rem;
 }
 
-/* Адаптив */
-@media (max-width: 600px) {
-    .app-container {
-        padding: 16px;
-    }
-    h1 {
-        font-size: 1.3rem;
-    }
-    #roomId {
-        width: 180px;
-    }
+.user-name { display: flex; align-items: center; gap: 8px; }
+.user-name.is-me { color: #4f8ef7; font-weight: 600; }
+
+/* Адаптив для мобилок */
+@media (max-width: 850px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .users-list { max-height: 200px; }
 }
