@@ -137,3 +137,11 @@ button:hover { background: #3a7ae0; }
     .main-layout { grid-template-columns: 1fr; }
     .users-list { max-height: 200px; }
 }
+
+.block-overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.05); /* Легкое затемнение, чтобы зритель понимал, что кликать бесполезно */
+    cursor: not-allowed;
+}

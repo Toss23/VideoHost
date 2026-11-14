@@ -16,7 +16,7 @@
             <h1>🎬 Совместный просмотр VK Video</h1>
             
             <div class="room-controls">
-                <input type="text" id="nickname" placeholder="Ваш ник (например, Вася)" maxlength="15">
+                <input type="text" id="nickname" placeholder="Ваш ник" maxlength="15">
                 <input type="text" id="roomId" placeholder="Название комнаты" value="default-room">
                 <button id="joinBtn">Войти</button>
             </div>
@@ -33,9 +33,13 @@
         <main class="main-layout">
             <!-- Левая часть: Плеер -->
             <div class="player-section">
-                <div id="playerContainer" class="player-container">
+                <div class="player-container">
+                    <!-- Плеер будет вставлен сюда -->
                     <p class="placeholder">Ожидание видео...</p>
+                    <!-- Слой, блокирующий клики для зрителей -->
+                    <div id="blockOverlay" class="block-overlay" style="display: none;"></div>
                 </div>
+                
                 <div class="sync-info">
                     <span id="roleBadge" class="badge">👤 Зритель</span>
                     <button id="becomeLeaderBtn" class="leader-btn" style="display:none;">Стать ведущим</button>
@@ -46,9 +50,7 @@
             <!-- Правая часть: Участники -->
             <div class="users-section">
                 <h3>Участники (<span id="userCount">0</span>)</h3>
-                <ul id="usersList" class="users-list">
-                    <!-- Список формируется через JS -->
-                </ul>
+                <ul id="usersList" class="users-list"></ul>
             </div>
         </main>
     </div>
