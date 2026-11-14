@@ -27,7 +27,7 @@ let isLeader = false;
 let isSyncing = false;
 let currentVideoUrl = "";
 let syncInterval = null;
-let lastSeekTime = 0; // Защита от частых перемоток
+let lastSeekTime = 0;
 
 // DOM
 const nicknameInput = document.getElementById('nickname');
@@ -104,11 +104,10 @@ function loadPlayer(videoUrl) {
 function broadcastState(action) {
     if (!roomRef || !isLeader || isSyncing || !player) return;
     
-    const isPlaying = player.getState() === 'playing';
     roomRef.child('state').set({
         action: action,
         time: player.getCurrentTime(),
-        isPlaying: isPlaying,
+        isPlaying: player.getState() === 'playing',
         serverTime: firebase.database.ServerValue.TIMESTAMP
     });
 }
@@ -131,14 +130,22 @@ function applyRemoteState(state) {
     isSyncing = true;
 
     try {
-        // 1. ЖЕСТКАЯ ПАУЗА (Если ведущий нажал паузу)
+        // 1. Жесткая синхронизация Play/Pause
+        if (state.isPlaying && !localIsPlaying) {
+            player.play();
+        } else if (!state.isPlaying && localIsPlaying) {
+            player.pause();
+        }
+
+        // 2. Синхронизация времени
         if (state.action === 'pause') {
             player.pause();
             player.seek(state.time);
+            // Страховка: если плеер ВК решил продолжить игру после seek, насильно ставим на паузу
+            setTimeout(() => { if(player && player.getState() === 'playing') player.pause(); }, 250);
+            setTimeout(() => { if(player && player.getState() === 'playing') player.pause(); }, 500);
             setSyncStatus(`⏸ Пауза на ${formatTime(state.time)}`);
-        }
-        
-        // 2. ЖЕСТКИЙ ПЛЕЙ (Если ведущий нажал плей)
+        } 
         else if (state.action === 'play') {
             let adjustedTime = state.time;
             if (state.serverTime) {
@@ -149,8 +156,6 @@ function applyRemoteState(state) {
             player.play();
             setSyncStatus(`▶ Воспроизведение`);
         }
-        
-        // 3. ПЕРЕМОТКА (Если ведущий дернул ползунок)
         else if (state.action === 'seek') {
             let adjustedTime = state.time;
             if (state.isPlaying && state.serverTime) {
@@ -158,18 +163,16 @@ function applyRemoteState(state) {
                 if (networkDelay > 0 && networkDelay < 5) adjustedTime += networkDelay;
             }
             player.seek(adjustedTime);
+            if (!state.isPlaying) {
+                player.pause();
+                setTimeout(() => { if(player && player.getState() === 'playing') player.pause(); }, 250);
+            }
             setSyncStatus(`⏩ Перемотка`);
         }
-        
-        // 4. ФОНОВЫЙ ПУЛЬС (Раз в 1.5 сек)
         else if (state.action === 'tick') {
-            // Если зритель сам поставил на паузу, а ведущий играет — включаем обратно
-            if (state.isPlaying && !localIsPlaying) {
-                player.play();
-            }
-            // Если отставание больше 3 секунд — подтягиваем время (с кулдауном)
-            if (state.isPlaying && timeDiff > 3) {
-                if (now - lastSeekTime > 4000) {
+            if (state.isPlaying) {
+                // Ведущий играет
+                if (timeDiff > 3 && now - lastSeekTime > 4000) {
                     let adjustedTime = state.time;
                     if (state.serverTime) {
                         const networkDelay = (now - state.serverTime) / 1000; 
@@ -179,12 +182,20 @@ function applyRemoteState(state) {
                     lastSeekTime = now;
                     setSyncStatus(`⏩ Синхронизация...`);
                 }
+            } else {
+                // Ведущий на паузе
+                if (localIsPlaying) player.pause();
+                if (timeDiff > 1.5) {
+                    player.seek(state.time);
+                    setTimeout(() => { if(player && player.getState() === 'playing') player.pause(); }, 250);
+                }
+                setSyncStatus(`⏸ Пауза`);
             }
         }
     } catch (e) {
         console.warn("Ошибка синхронизации", e);
     } finally {
-        setTimeout(() => { isSyncing = false; }, 500);
+        setTimeout(() => { isSyncing = false; }, 600);
     }
 }
 
@@ -231,7 +242,6 @@ function joinRoom() {
             setLeaderUI(false);
             userRef.update({ isLeader: false });
             
-            // Защита от перехвата роли: если ведущий есть, кнопку прячем наглухо
             if (leaderId) {
                 becomeLeaderBtn.style.display = 'none';
                 setSyncStatus('Ведущий управляет просмотром.');
@@ -257,13 +267,13 @@ function joinRoom() {
         if (state) applyRemoteState(state);
     });
 
-    // Фоновый пульс ведущего
+    // Пульс ведущего — отправляется КАЖДУЮ СЕКУНДУ, даже на паузе
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => {
-        if (isLeader && player && player.getState() === 'playing') {
+        if (isLeader && player) {
             broadcastState('tick');
         }
-    }, 1500);
+    }, 1000);
 }
 
 // ============================================================
@@ -302,16 +312,14 @@ setVideoBtn.addEventListener('click', () => {
     });
 });
 
-// ЗАЩИТА ОТ КРАЖИ ВЕДУЩЕГО (Транзакция)
+// Защита от кражи ведущего (Транзакция)
 function becomeLeader() {
     if (!roomRef) return;
     
     roomRef.child('leader').transaction(function(currentLeader) {
-        // Если ведущего нет (null), назначаем себя
         if (currentLeader === null) {
             return myUserId;
         }
-        // Если ведущий уже есть, оставляем как есть (отмена)
         return currentLeader; 
     }).then((result) => {
         if (result.committed) {
@@ -344,7 +352,6 @@ function setLeaderUI(leader) {
         roleBadge.classList.remove('leader');
         videoSetup.style.display = 'none'; 
         
-        // Проверяем, есть ли ведущий, если нет - показываем кнопку
         roomRef.child('leader').once('value').then(snap => {
             if (!snap.val()) becomeLeaderBtn.style.display = 'inline-block';
             else becomeLeaderBtn.style.display = 'none';
