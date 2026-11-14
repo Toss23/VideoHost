@@ -17,12 +17,11 @@ const database = firebase.database();
 // ============================================================
 //  СОСТОЯНИЕ
 // ============================================================
-// Генерируем уникальный ID для текущей сессии (сохраняется в памяти до перезагрузки)
 const myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
 let myNickname = "";
 let player = null;
 let roomRef = null;
-let userRef = null; // Ссылка на нашего пользователя в Firebase
+let userRef = null; 
 let isLeader = false;
 let isSyncing = false;
 let currentVideoUrl = "";
@@ -128,7 +127,7 @@ function applyRemoteState(state) {
 }
 
 // ============================================================
-//  ВХОД В КОМНАТУ И СИСТЕМА ПРИСУТСТВИЯ
+//  ВХОД В КОМНАТУ
 // ============================================================
 function joinRoom() {
     myNickname = nicknameInput.value.trim();
@@ -142,16 +141,12 @@ function joinRoom() {
     roomRef = database.ref(`rooms/${id}`);
     userRef = roomRef.child('users').child(myUserId);
     
-    // Регистрируем пользователя в комнате
     userRef.set({
         name: myNickname,
         joinedAt: firebase.database.ServerValue.TIMESTAMP
     });
 
-    // Когда вкладка закрывается — удаляем пользователя из базы
     userRef.onDisconnect().remove();
-
-    // Очищаем права ведущего при выходе, если мы были ведущим
     roomRef.child('leader').onDisconnect().remove();
 
     setStatus(`Вы вошли как ${myNickname}`);
@@ -168,7 +163,6 @@ function joinRoom() {
         
         if (leaderId === myUserId) {
             setLeaderUI(true);
-            // Обновляем статус в списке
             userRef.update({ isLeader: true });
         } else {
             setLeaderUI(false);
@@ -187,9 +181,6 @@ function joinRoom() {
         if (url) {
             videoInput.value = url;
             loadPlayer(url);
-            videoSetup.style.display = 'none'; // Скрываем ввод, если видео уже есть
-        } else {
-            videoSetup.style.display = 'block';
         }
     });
 
@@ -206,7 +197,6 @@ function joinRoom() {
 function renderUsersList(users) {
     usersListEl.innerHTML = '';
     
-    // Превращаем объект в массив и сортируем (сначала ведущие)
     const usersArray = Object.keys(users).map(key => ({ id: key, ...users[key] }));
     usersArray.sort((a, b) => (b.isLeader ? 1 : 0) - (a.isLeader ? 1 : 0));
 
@@ -220,7 +210,6 @@ function renderUsersList(users) {
         nameSpan.className = 'user-name';
         if (user.id === myUserId) nameSpan.classList.add('is-me');
         
-        // Корона для ведущего, иконка для остальных
         const icon = user.isLeader ? '👑 ' : '👤 ';
         nameSpan.textContent = icon + user.name;
 
@@ -236,12 +225,11 @@ setVideoBtn.addEventListener('click', () => {
     if (!roomRef) return;
     const parsedUrl = parseVkVideo(videoInput.value);
     if (!parsedUrl) {
-        alert('Не удалось распознать ссылку.');
+        alert('Не удалось распознать ссылку. Вставьте ссылку на видео ВК или iframe-код.');
         return;
     }
     roomRef.child('videoUrl').set(parsedUrl).then(() => {
         loadPlayer(parsedUrl);
-        videoSetup.style.display = 'none';
     });
 });
 
@@ -258,16 +246,21 @@ function setStatus(text, isError = false) {
 }
 function setSyncStatus(text) { syncStatusEl.textContent = text; }
 
+// --- ИСПРАВЛЕННАЯ ФУНКЦИЯ РОЛЕЙ И ВИДИМОСТИ ВВОДА ---
 function setLeaderUI(leader) {
     isLeader = leader;
     if (leader) {
         roleBadge.textContent = '👑 Ведущий';
         roleBadge.classList.add('leader');
         becomeLeaderBtn.style.display = 'none';
+        // Ведущий всегда видит поле для смены видео
+        videoSetup.style.display = 'block'; 
     } else {
         roleBadge.textContent = '👤 Зритель';
         roleBadge.classList.remove('leader');
-        // Кнопка покажется, только если ведущего нет
+        // Зритель не видит поле ввода
+        videoSetup.style.display = 'none'; 
+        
         roomRef.child('leader').once('value').then(snap => {
             if (!snap.val()) becomeLeaderBtn.style.display = 'inline-block';
         });
