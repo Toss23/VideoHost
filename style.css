@@ -145,3 +145,37 @@ button:hover { background: #3a7ae0; }
     background: rgba(0, 0, 0, 0.05); /* Легкое затемнение, чтобы зритель понимал, что кликать бесполезно */
     cursor: not-allowed;
 }
+
+/* ... ваш предыдущий CSS ... */
+
+.player-container {
+    position: relative;
+}
+
+.viewer-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px 15px;
+    border-radius: 30px;
+    backdrop-filter: blur(5px);
+}
+
+.ctrl-btn {
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    padding: 8px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.2s;
+}
+.ctrl-btn:hover {
+    background: #555;
+}

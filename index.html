@@ -14,7 +14,6 @@
     <div class="app-container">
         <header>
             <h1>🎬 Совместный просмотр VK Video</h1>
-            
             <div class="room-controls">
                 <input type="text" id="nickname" placeholder="Ваш ник" maxlength="15">
                 <input type="text" id="roomId" placeholder="Название комнаты" value="default-room">
@@ -31,13 +30,15 @@
         </div>
 
         <main class="main-layout">
-            <!-- Левая часть: Плеер -->
             <div class="player-section">
                 <div class="player-container">
-                    <!-- Плеер будет вставлен сюда -->
                     <p class="placeholder">Ожидание видео...</p>
-                    <!-- Слой, блокирующий клики для зрителей -->
-                    <div id="blockOverlay" class="block-overlay" style="display: none;"></div>
+                    <!-- Панель управления для зрителей -->
+                    <div id="viewerControls" class="viewer-controls" style="display: none;">
+                        <button id="volDownBtn" class="ctrl-btn">🔉 -</button>
+                        <button id="volUpBtn" class="ctrl-btn">🔊 +</button>
+                        <button id="fsBtn" class="ctrl-btn">⛶ Фулскрин</button>
+                    </div>
                 </div>
                 
                 <div class="sync-info">
@@ -47,7 +48,6 @@
                 </div>
             </div>
 
-            <!-- Правая часть: Участники -->
             <div class="users-section">
                 <h3>Участники (<span id="userCount">0</span>)</h3>
                 <ul id="usersList" class="users-list"></ul>

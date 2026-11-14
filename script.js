@@ -20,12 +20,14 @@ const database = firebase.database();
 const myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
 let myNickname = "";
 let player = null;
+let iframeEl = null;
 let roomRef = null;
 let userRef = null; 
 let isLeader = false;
 let isSyncing = false;
 let currentVideoUrl = "";
 let syncInterval = null;
+let currentVolume = 1;
 
 // DOM
 const nicknameInput = document.getElementById('nickname');
@@ -41,15 +43,19 @@ const videoInput = document.getElementById('videoInput');
 const setVideoBtn = document.getElementById('setVideoBtn');
 const usersListEl = document.getElementById('usersList');
 const userCountEl = document.getElementById('userCount');
-const blockOverlay = document.getElementById('blockOverlay');
+const viewerControls = document.getElementById('viewerControls');
+
+// Кнопки управления
+const volDownBtn = document.getElementById('volDownBtn');
+const volUpBtn = document.getElementById('volUpBtn');
+const fsBtn = document.getElementById('fsBtn');
 
 // ============================================================
-//  ПАРСИНГ ССЫЛКИ ВК
+//  ПАРСИНГ ССЫЛКИ
 // ============================================================
 function parseVkVideo(input) {
     input = input.trim();
     if (!input) return null;
-
     if (input.includes('<iframe')) {
         const match = input.match(/src=["'](.*?)["']/);
         if (match) {
@@ -58,16 +64,9 @@ function parseVkVideo(input) {
             return url;
         }
     }
-
     const match = input.match(/video(-?\d+)_(\d+)/);
-    if (match) {
-        return `https://vk.com/video_ext.php?oid=${match[1]}&id=${match[2]}&hd=2&js_api=1`;
-    }
-
-    if (input.includes('video_ext.php')) {
-        return input.includes('js_api=1') ? input : input + '&js_api=1';
-    }
-
+    if (match) return `https://vk.com/video_ext.php?oid=${match[1]}&id=${match[2]}&hd=2&js_api=1`;
+    if (input.includes('video_ext.php')) return input.includes('js_api=1') ? input : input + '&js_api=1';
     return null;
 }
 
@@ -80,26 +79,22 @@ function loadPlayer(videoUrl) {
 
     if (player) { try { player.destroy(); } catch(e){} player = null; }
     
-    // Очищаем всё, кроме оверлея
-    const placeholder = playerContainer.querySelector('.placeholder');
-    if (placeholder) placeholder.remove();
     const oldIframe = playerContainer.querySelector('iframe');
     if (oldIframe) oldIframe.remove();
 
-    const iframe = document.createElement('iframe');
-    iframe.src = videoUrl;
-    iframe.width = "100%";
-    iframe.height = "100%";
-    iframe.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture;";
-    iframe.frameBorder = "0";
-    iframe.allowFullscreen = true;
+    iframeEl = document.createElement('iframe');
+    iframeEl.src = videoUrl;
+    iframeEl.width = "100%";
+    iframeEl.height = "100%";
+    iframeEl.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture;";
+    iframeEl.frameBorder = "0";
+    iframeEl.allowFullscreen = true;
     
-    // Вставляем iframe перед оверлеем
-    playerContainer.insertBefore(iframe, blockOverlay);
+    playerContainer.insertBefore(iframeEl, viewerControls);
 
-    iframe.addEventListener('load', () => {
+    iframeEl.addEventListener('load', () => {
         try {
-            player = VK.VideoPlayer(iframe);
+            player = VK.VideoPlayer(iframeEl);
             player.on('play', onLocalPlay);
             player.on('pause', onLocalPause);
             player.on('seek', onLocalSeek);
@@ -111,19 +106,17 @@ function loadPlayer(videoUrl) {
 }
 
 // ============================================================
-//  СИНХРОНИЗАЦИЯ И ОТПРАВКА СОСТОЯНИЯ
+//  КОМПЕНСАЦИЯ ЗАДЕРЖКИ И СИНХРОНИЗАЦИЯ
 // ============================================================
 function broadcastState(action) {
     if (!roomRef || !isLeader || isSyncing || !player) return;
     
-    // VK API getState() возвращает строку: 'playing', 'paused' и т.д.
     const isPlaying = player.getState() === 'playing';
-    
     roomRef.child('state').set({
         action: action,
         time: player.getCurrentTime(),
         isPlaying: isPlaying,
-        timestamp: Date.now()
+        serverTime: firebase.database.ServerValue.TIMESTAMP // Время сервера Firebase
     });
 }
 
@@ -140,10 +133,20 @@ function applyRemoteState(state) {
     const localIsPlaying = player.getState() === 'playing';
 
     try {
-        // 1. Синхронизация времени (если отстали/убежали более чем на 2 секунды)
-        // Или если это явная перемотка/пауза
-        if (state.action === 'seek' || state.action === 'pause' || timeDiff > 2) {
-            player.seek(state.time);
+        // 1. Синхронизация времени (порог 1.5 секунды для более точного совпадения)
+        if (state.action === 'seek' || state.action === 'pause' || timeDiff > 1.5) {
+            // Компенсация задержки сети при получении пакета
+            let adjustedTime = state.time;
+            if (state.serverTime && state.isPlaying) {
+                // Вычисляем, сколько времени прошло с момента отправки (учитывая задержку)
+                const now = Date.now();
+                const networkDelay = (now - state.serverTime) / 1000; 
+                // Если задержка большая (видео у ведущего ушло вперёд), догоняем
+                if (networkDelay > 0 && networkDelay < 10) { 
+                    adjustedTime += networkDelay;
+                }
+            }
+            player.seek(adjustedTime);
         }
 
         // 2. Синхронизация Play/Pause
@@ -169,6 +172,23 @@ function formatTime(seconds) {
 }
 
 // ============================================================
+//  УПРАВЛЕНИЕ ГРОМКОСТЬЮ И ФУЛСКРИНОМ (через postMessage)
+// ============================================================
+volUpBtn.addEventListener('click', () => {
+    currentVolume = Math.min(1, currentVolume + 0.1);
+    if (iframeEl) iframeEl.contentWindow.postMessage({ action: 'setVolume', volume: currentVolume }, '*');
+});
+
+volDownBtn.addEventListener('click', () => {
+    currentVolume = Math.max(0, currentVolume - 0.1);
+    if (iframeEl) iframeEl.contentWindow.postMessage({ action: 'setVolume', volume: currentVolume }, '*');
+});
+
+fsBtn.addEventListener('click', () => {
+    if (iframeEl) iframeEl.contentWindow.postMessage({ action: 'playerFullscreen' }, '*');
+});
+
+// ============================================================
 //  ВХОД В КОМНАТУ
 // ============================================================
 function joinRoom() {
@@ -189,12 +209,10 @@ function joinRoom() {
 
     setStatus(`Вы вошли как ${myNickname}`);
 
-    // Список участников
     roomRef.child('users').on('value', (snapshot) => {
         renderUsersList(snapshot.val() || {});
     });
 
-    // Отслеживание роли
     roomRef.child('leader').on('value', (snapshot) => {
         const leaderId = snapshot.val();
         if (leaderId === myUserId) {
@@ -210,7 +228,6 @@ function joinRoom() {
         }
     });
 
-    // Отслеживание видео
     roomRef.child('videoUrl').on('value', (snap) => {
         const url = snap.val();
         if (url) {
@@ -219,23 +236,21 @@ function joinRoom() {
         }
     });
 
-    // Отслеживание состояния плеера (тайминг и play/pause)
     roomRef.child('state').on('value', (snap) => {
         const state = snap.val();
         if (state) applyRemoteState(state);
     });
 
-    // Запускаем "пульс" для ведущего (каждые 2 секунды)
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => {
         if (isLeader && player && player.getState() === 'playing') {
             broadcastState('tick');
         }
-    }, 2000);
+    }, 1500); // Увеличили частоту "пульса" до 1.5 сек для более точной синхронизации
 }
 
 // ============================================================
-//  ОТРИСОВКА СПИСКА УЧАСТНИКОВ
+//  ОТРИСОВКА И UI
 // ============================================================
 function renderUsersList(users) {
     usersListEl.innerHTML = '';
@@ -249,24 +264,18 @@ function renderUsersList(users) {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'user-name';
         if (user.id === myUserId) nameSpan.classList.add('is-me');
-        
         nameSpan.textContent = (user.isLeader ? '👑 ' : '👤 ') + user.name;
         li.appendChild(nameSpan);
         usersListEl.appendChild(li);
     });
 }
 
-// ============================================================
-//  УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ
-// ============================================================
 setVideoBtn.addEventListener('click', () => {
     if (!roomRef || !isLeader) return;
     const parsedUrl = parseVkVideo(videoInput.value);
     if (!parsedUrl) return alert('Не удалось распознать ссылку.');
-    
     roomRef.child('videoUrl').set(parsedUrl).then(() => {
         loadPlayer(parsedUrl);
-        // Сбрасываем старое состояние при смене видео
         roomRef.child('state').remove(); 
     });
 });
@@ -280,7 +289,6 @@ function setStatus(text, isError = false) {
     statusEl.textContent = text;
     statusEl.style.color = isError ? '#f87171' : '#9ca3af';
 }
-
 function setSyncStatus(text) { syncStatusEl.textContent = text; }
 
 function setLeaderUI(leader) {
@@ -290,12 +298,12 @@ function setLeaderUI(leader) {
         roleBadge.classList.add('leader');
         becomeLeaderBtn.style.display = 'none';
         videoSetup.style.display = 'block'; 
-        blockOverlay.style.display = 'none'; // Снимаем блокировку с плеера
+        viewerControls.style.display = 'none'; // Ведущий не видит наши кнопки (у него есть родные)
     } else {
         roleBadge.textContent = '👤 Зритель';
         roleBadge.classList.remove('leader');
         videoSetup.style.display = 'none'; 
-        blockOverlay.style.display = 'block'; // Блокируем клики по плееру
+        viewerControls.style.display = 'flex'; // Зритель видит панель управления
         
         roomRef.child('leader').once('value').then(snap => {
             if (!snap.val()) becomeLeaderBtn.style.display = 'inline-block';
