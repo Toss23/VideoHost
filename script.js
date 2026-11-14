@@ -28,6 +28,7 @@ let isSyncing = false;
 let currentVideoUrl = "";
 let syncInterval = null;
 let currentVolume = 1;
+let lastSeekTime = 0; // Для защиты от частых перемоток (кулдаун)
 
 // DOM
 const nicknameInput = document.getElementById('nickname');
@@ -45,17 +46,19 @@ const usersListEl = document.getElementById('usersList');
 const userCountEl = document.getElementById('userCount');
 const viewerControls = document.getElementById('viewerControls');
 
-// Кнопки управления
+// Кнопки управления зрителя
 const volDownBtn = document.getElementById('volDownBtn');
 const volUpBtn = document.getElementById('volUpBtn');
 const fsBtn = document.getElementById('fsBtn');
 
 // ============================================================
-//  ПАРСИНГ ССЫЛКИ
+//  ПАРСИНГ ССЫЛКИ ВК
 // ============================================================
 function parseVkVideo(input) {
     input = input.trim();
     if (!input) return null;
+
+    // Если вставлен iframe-код
     if (input.includes('<iframe')) {
         const match = input.match(/src=["'](.*?)["']/);
         if (match) {
@@ -64,9 +67,18 @@ function parseVkVideo(input) {
             return url;
         }
     }
+
+    // Если вставлена обычная ссылка вида vk.com/video-123_456
     const match = input.match(/video(-?\d+)_(\d+)/);
-    if (match) return `https://vk.com/video_ext.php?oid=${match[1]}&id=${match[2]}&hd=2&js_api=1`;
-    if (input.includes('video_ext.php')) return input.includes('js_api=1') ? input : input + '&js_api=1';
+    if (match) {
+        return `https://vk.com/video_ext.php?oid=${match[1]}&id=${match[2]}&hd=2&js_api=1`;
+    }
+
+    // Если вставлена прямая ссылка на video_ext.php
+    if (input.includes('video_ext.php')) {
+        return input.includes('js_api=1') ? input : input + '&js_api=1';
+    }
+
     return null;
 }
 
@@ -77,11 +89,12 @@ function loadPlayer(videoUrl) {
     if (currentVideoUrl === videoUrl && player) return;
     currentVideoUrl = videoUrl;
 
+    // Уничтожаем старый плеер
     if (player) { try { player.destroy(); } catch(e){} player = null; }
-    
     const oldIframe = playerContainer.querySelector('iframe');
     if (oldIframe) oldIframe.remove();
 
+    // Создаем новый iframe
     iframeEl = document.createElement('iframe');
     iframeEl.src = videoUrl;
     iframeEl.width = "100%";
@@ -90,6 +103,7 @@ function loadPlayer(videoUrl) {
     iframeEl.frameBorder = "0";
     iframeEl.allowFullscreen = true;
     
+    // Вставляем перед панелью управления
     playerContainer.insertBefore(iframeEl, viewerControls);
 
     iframeEl.addEventListener('load', () => {
@@ -100,13 +114,13 @@ function loadPlayer(videoUrl) {
             player.on('seek', onLocalSeek);
             setSyncStatus('Видео загружено. Ожидание действий ведущего.');
         } catch (e) {
-            setSyncStatus('Ошибка VK API.');
+            setSyncStatus('Ошибка VK API. Проверьте ссылку.');
         }
     });
 }
 
 // ============================================================
-//  КОМПЕНСАЦИЯ ЗАДЕРЖКИ И СИНХРОНИЗАЦИЯ
+//  СИНХРОНИЗАЦИЯ (ОТПРАВКА)
 // ============================================================
 function broadcastState(action) {
     if (!roomRef || !isLeader || isSyncing || !player) return;
@@ -116,7 +130,7 @@ function broadcastState(action) {
         action: action,
         time: player.getCurrentTime(),
         isPlaying: isPlaying,
-        serverTime: firebase.database.ServerValue.TIMESTAMP // Время сервера Firebase
+        serverTime: firebase.database.ServerValue.TIMESTAMP // Время сервера для компенсации задержек
     });
 }
 
@@ -124,43 +138,58 @@ function onLocalPlay() { broadcastState('play'); }
 function onLocalPause() { broadcastState('pause'); }
 function onLocalSeek() { broadcastState('seek'); }
 
+// ============================================================
+//  СИНХРОНИЗАЦИЯ (ПРИМЕНЕНИЕ У ЗРИТЕЛЕЙ)
+// ============================================================
 function applyRemoteState(state) {
     if (!player || !state || isLeader) return;
 
-    isSyncing = true;
     const localTime = player.getCurrentTime();
     const timeDiff = Math.abs(localTime - state.time);
     const localIsPlaying = player.getState() === 'playing';
+    const now = Date.now();
+
+    isSyncing = true;
 
     try {
-        // 1. Синхронизация времени (порог 1.5 секунды для более точного совпадения)
-        if (state.action === 'seek' || state.action === 'pause' || timeDiff > 1.5) {
-            // Компенсация задержки сети при получении пакета
-            let adjustedTime = state.time;
-            if (state.serverTime && state.isPlaying) {
-                // Вычисляем, сколько времени прошло с момента отправки (учитывая задержку)
-                const now = Date.now();
-                const networkDelay = (now - state.serverTime) / 1000; 
-                // Если задержка большая (видео у ведущего ушло вперёд), догоняем
-                if (networkDelay > 0 && networkDelay < 10) { 
-                    adjustedTime += networkDelay;
-                }
-            }
-            player.seek(adjustedTime);
-        }
-
-        // 2. Синхронизация Play/Pause
+        // 1. СИНХРОНИЗАЦИЯ PLAY / PAUSE (Жесткая)
         if (state.isPlaying && !localIsPlaying) {
             player.play();
-            setSyncStatus(`▶ Воспроизведение с ${formatTime(state.time)}`);
+            setSyncStatus(`▶ Воспроизведение`);
         } else if (!state.isPlaying && localIsPlaying) {
             player.pause();
-            setSyncStatus(`⏸ Пауза на ${formatTime(state.time)}`);
+            setSyncStatus(`⏸ Пауза`);
+        }
+
+        // 2. СИНХРОНИЗАЦИЯ ВРЕМЕНИ (Мягкая)
+        // Вмешиваемся, только если это явная перемотка или отставание > 3 сек
+        const needsSeek = (state.action === 'seek') || (state.isPlaying && timeDiff > 3);
+
+        if (needsSeek) {
+            // Кулдаун: не дергаем видео чаще, чем раз в 4 секунды
+            if (now - lastSeekTime > 4000) {
+                let adjustedTime = state.time;
+
+                // Компенсация сетевой задержки
+                if (state.isPlaying && state.serverTime) {
+                    const networkDelay = (now - state.serverTime) / 1000; 
+                    if (networkDelay > 0 && networkDelay < 5) { 
+                        adjustedTime += networkDelay;
+                    }
+                }
+
+                player.seek(adjustedTime);
+                lastSeekTime = now;
+                setSyncStatus(`⏩ Синхронизация...`);
+            }
+        } else if (state.isPlaying) {
+            // Если мы в "мертвой зоне", просто показываем отставание в интерфейсе
+            setSyncStatus(`▶ Смотр вместе (отставание ${timeDiff.toFixed(1)}с)`);
         }
     } catch (e) {
         console.warn("Ошибка синхронизации", e);
     } finally {
-        setTimeout(() => { isSyncing = false; }, 500);
+        setTimeout(() => { isSyncing = false; }, 800);
     }
 }
 
@@ -172,7 +201,7 @@ function formatTime(seconds) {
 }
 
 // ============================================================
-//  УПРАВЛЕНИЕ ГРОМКОСТЬЮ И ФУЛСКРИНОМ (через postMessage)
+//  УПРАВЛЕНИЕ ГРОМКОСТЬЮ И ФУЛСКРИНОМ (ЗРИТЕЛИ)
 // ============================================================
 volUpBtn.addEventListener('click', () => {
     currentVolume = Math.min(1, currentVolume + 0.1);
@@ -209,10 +238,12 @@ function joinRoom() {
 
     setStatus(`Вы вошли как ${myNickname}`);
 
+    // Слушаем участников
     roomRef.child('users').on('value', (snapshot) => {
         renderUsersList(snapshot.val() || {});
     });
 
+    // Слушаем ведущего
     roomRef.child('leader').on('value', (snapshot) => {
         const leaderId = snapshot.val();
         if (leaderId === myUserId) {
@@ -228,6 +259,7 @@ function joinRoom() {
         }
     });
 
+    // Слушаем видео
     roomRef.child('videoUrl').on('value', (snap) => {
         const url = snap.val();
         if (url) {
@@ -236,21 +268,23 @@ function joinRoom() {
         }
     });
 
+    // Слушаем состояние плеера
     roomRef.child('state').on('value', (snap) => {
         const state = snap.val();
         if (state) applyRemoteState(state);
     });
 
+    // Пульс ведущего (отправляем тайминг каждые 1.5 секунды)
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => {
         if (isLeader && player && player.getState() === 'playing') {
             broadcastState('tick');
         }
-    }, 1500); // Увеличили частоту "пульса" до 1.5 сек для более точной синхронизации
+    }, 1500);
 }
 
 // ============================================================
-//  ОТРИСОВКА И UI
+//  ОТРИСОВКА СПИСКА УЧАСТНИКОВ
 // ============================================================
 function renderUsersList(users) {
     usersListEl.innerHTML = '';
@@ -264,19 +298,24 @@ function renderUsersList(users) {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'user-name';
         if (user.id === myUserId) nameSpan.classList.add('is-me');
+        
         nameSpan.textContent = (user.isLeader ? '👑 ' : '👤 ') + user.name;
         li.appendChild(nameSpan);
         usersListEl.appendChild(li);
     });
 }
 
+// ============================================================
+//  КНОПКИ И ИНТЕРФЕЙС
+// ============================================================
 setVideoBtn.addEventListener('click', () => {
     if (!roomRef || !isLeader) return;
     const parsedUrl = parseVkVideo(videoInput.value);
-    if (!parsedUrl) return alert('Не удалось распознать ссылку.');
+    if (!parsedUrl) return alert('Не удалось распознать ссылку. Вставьте ссылку на видео ВК или iframe.');
+    
     roomRef.child('videoUrl').set(parsedUrl).then(() => {
         loadPlayer(parsedUrl);
-        roomRef.child('state').remove(); 
+        roomRef.child('state').remove(); // Сбрасываем тайминг старого видео
     });
 });
 
@@ -289,6 +328,7 @@ function setStatus(text, isError = false) {
     statusEl.textContent = text;
     statusEl.style.color = isError ? '#f87171' : '#9ca3af';
 }
+
 function setSyncStatus(text) { syncStatusEl.textContent = text; }
 
 function setLeaderUI(leader) {
@@ -298,12 +338,12 @@ function setLeaderUI(leader) {
         roleBadge.classList.add('leader');
         becomeLeaderBtn.style.display = 'none';
         videoSetup.style.display = 'block'; 
-        viewerControls.style.display = 'none'; // Ведущий не видит наши кнопки (у него есть родные)
+        viewerControls.style.display = 'none'; // Ведущий управляет родными кнопками ВК
     } else {
         roleBadge.textContent = '👤 Зритель';
         roleBadge.classList.remove('leader');
         videoSetup.style.display = 'none'; 
-        viewerControls.style.display = 'flex'; // Зритель видит панель управления
+        viewerControls.style.display = 'flex'; // Зритель видит панель громкости/фулскрина
         
         roomRef.child('leader').once('value').then(snap => {
             if (!snap.val()) becomeLeaderBtn.style.display = 'inline-block';
